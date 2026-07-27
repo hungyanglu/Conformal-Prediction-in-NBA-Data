@@ -43,24 +43,4 @@ Data collected from [Basketball Reference](https://www.basketball-reference.com/
 - **Validation Test Set:** $2020–2021$ known season ($X_{2019-2020} \rightarrow Y_{2020-2021}$).
 - **Out-of-Sample Target Set:** $2021–2022$ unobserved season ($X_{2020-2021} \rightarrow \hat{Y}_{2021-2022}$).
 
----
 
-## Repository Structure
-
-```text
-├── data/
-│   ├── player_stats_2000_2021.csv      # Player-level box-score and advanced metrics
-│   ├── team_stats_1991_2021.csv        # Team-level franchise indicators
-│   └── mvp_voting_shares_2000_2021.csv # Historical MVP voting results
-├── src/
-│   ├── base_models.py                  # ML baseline architectures (RF, NN, ARIMA, LSTM)
-│   ├── conformal_methods.py            # Implementations of 7 Conformal Prediction algorithms
-│   ├── data_loader.py                  # Preprocessing and longitudinal (t -> t+1) splitters
-│   └── evaluation.py                   # Empirical coverage and average length calculators
-├── plots/                              # Generated error bar interval figures
-├── docs/
-│   ├── final_report.pdf                # Full research paper
-│   └── final_report.tex                # Complete LaTeX paper source code
-├── main.py                             # Master pipeline execution script
-├── requirements.txt                    # Dependencies
-└── README.md                           # Project documentation
