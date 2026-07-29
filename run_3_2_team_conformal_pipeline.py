@@ -17,7 +17,7 @@ print("="*105)
 # 1. EXTRACT DATA & FEATURE/RESPONSE DEFINITIONS (Section 3.2.1)
 # ------------------------------------------------------------------------------
 print("\n[STEP 1] Data Extraction & Longitudinal Structuring (Section 3.2.1)...")
-data_path = 'file name' #File is downloaded from Basketball Reference
+data_path = 'file name' #the file is downloaded from Basketball Reference
 t_df = pd.read_excel(data_path, sheet_name=0)
 
 target_col = [c for c in t_df.columns if 'Win%' in c or 'PCT' in c or 'W/L' in c or 'win' in c.lower()][0] if any('Win%' in c for c in t_df.columns) else t_df.columns[-1]
