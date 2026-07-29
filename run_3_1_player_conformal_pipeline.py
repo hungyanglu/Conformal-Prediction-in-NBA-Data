@@ -17,7 +17,7 @@ print("="*105)
 # 1. EXTRACT DATA & FEATURE/RESPONSE DEFINITIONS (Section 3.1.1)
 # ------------------------------------------------------------------------------
 print("\n[STEP 1] Data Extraction & Longitudinal Structuring (Section 3.1.1)...")
-data_path = 'Player Data.xlsx'
+data_path = 'file name' #the file is downloaded from Basketball Reference
 p_df = pd.read_excel(data_path, sheet_name=0)
 
 features_t = ['Age.1', 'G.1', 'MP.1', 'PER▼.1', 'TS%.1', '3PAr.1', 'FTr.1', 
