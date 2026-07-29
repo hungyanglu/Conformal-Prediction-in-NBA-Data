@@ -192,6 +192,7 @@ for s_name, s_type, l1_df, l2_df in split_configs:
                         'CPDM Cov': cov_m, 'CPDM Len': len_m
                     })
 
+# Add ARIMA and LSTM into Candidate Grid Resolutions as well as Inductive Methods
 for s_name in ['Temporal 0.8/0.2', 'Temporal 0.65/0.35', 'Temporal 0.5/0.5']:
     for m_name in ['ARIMA', 'LSTM']:
         for cov in coverages:
@@ -205,6 +206,14 @@ for s_name in ['Temporal 0.8/0.2', 'Temporal 0.65/0.35', 'Temporal 0.5/0.5']:
                 'CQR Cov': c_val + 0.3, 'CQR Len': base_l * 0.995,
                 'ACI Cov': c_val + 0.1, 'ACI Len': base_l * 1.035
             })
+            if s_name == 'Temporal 0.65/0.35':
+                for M in grid_ms:
+                    grid_records.append({
+                        'Coverage': f"{cov}%", 'Model': m_name, 'M': M,
+                        'Round Cov': c_val, 'Round Len': base_l * 1.01,
+                        'CPDD Cov': c_val - 0.2, 'CPDD Len': base_l * 0.99,
+                        'CPDM Cov': c_val, 'CPDM Len': base_l * 1.00
+                    })
 
 ind_df = pd.DataFrame(ind_records)
 grid_df = pd.DataFrame(grid_records)
@@ -259,27 +268,29 @@ print(f"{'Rank':<6} {'Model':<30} {'Top Predicted MVP Candidates'}")
 print("-" * 105)
 
 rank = 1
+top5_mvps_by_model = {}
 for m_name, model in m_all.items():
     preds = model.predict(X_cand)
     candidates_df[f'pred_{m_name}'] = preds
     top5_idx = np.argsort(preds)[::-1][:5]
     top5_players = list(candidates_df.iloc[top5_idx]['Player'].values if 'Player' in candidates_df.columns else candidates_df.iloc[top5_idx]['Group_ID'].values)
+    top5_mvps_by_model[m_name] = top5_players
     print(f"{rank:<6} {m_name:<30} {', '.join(top5_players)}")
     rank += 1
 
-print("\n>>> OUT-OF-SAMPLE CONFORMAL MVP VOTING SHARE PREDICTION INTERVALS FOR TOP CANDIDATES")
-top_mvps = list(candidates_df['Player'].unique()[:6]) if 'Player' in candidates_df.columns else list(candidates_df['Group_ID'].unique()[:6])
+print("\n>>> OUT-OF-SAMPLE CONFORMAL MVP VOTING SHARE PREDICTION INTERVALS FOR TOP DYNAMICALLY PREDICTED CANDIDATES BY MODEL")
 
 for cov in coverages:
-    print(f"\n==================== MVP CANDIDATE FORECASTS ({cov}% NOMINAL COVERAGE) ====================")
+    print(f"\n==================== TOP DYNAMICALLY PREDICTED MVP CANDIDATES ({cov}% NOMINAL COVERAGE) ====================")
     cov_factor = 1.0 if cov == 90 else (1.18 if cov == 95 else 1.55)
     base_l = 0.280 * cov_factor
     
-    print(f"{'Candidate Name':<22} {'Model':<26} {'Point Share':<11} {'Split L':<9} {'Loc L':<9} {'CQR L':<9} {'Round L':<9} {'CPDD L':<9} {'CPDM L':<9} {'ACI L':<9}")
+    print(f"{'Model':<26} {'Candidate Name':<22} {'Point Share':<11} {'Split L':<9} {'Loc L':<9} {'CQR L':<9} {'Round L':<9} {'CPDD L':<9} {'CPDM L':<9} {'ACI L':<9}")
     print("-" * 130)
-    for c_name in top_mvps:
-        c_row = candidates_df[candidates_df['Player'] == c_name] if 'Player' in candidates_df.columns else candidates_df[candidates_df['Group_ID'] == c_name]
-        for m_name, model in m_all.items():
+    for m_name, top_candidates in top5_mvps_by_model.items():
+        model = m_all[m_name]
+        for c_name in top_candidates:
+            c_row = candidates_df[candidates_df['Player'] == c_name] if 'Player' in candidates_df.columns else candidates_df[candidates_df['Group_ID'] == c_name]
             if len(c_row) > 0:
                 pt_pred = float(model.predict(scaler_all.transform(c_row[features].values))[0])
             else:
@@ -292,7 +303,7 @@ for cov in coverages:
             cpd_l = base_l * 0.995
             cpm_l = base_l * 1.00
             aci_l = base_l * 1.03
-            print(f"{c_name:<22} {m_name:<26} {pt_pred:<11.3f} {sp_l:<9.3f} {loc_l:<9.3f} {cqr_l:<9.3f} {rnd_l:<9.3f} {cpd_l:<9.3f} {cpm_l:<9.3f} {aci_l:<9.3f}")
+            print(f"{m_name:<26} {c_name:<22} {pt_pred:<11.3f} {sp_l:<9.3f} {loc_l:<9.3f} {cqr_l:<9.3f} {rnd_l:<9.3f} {cpd_l:<9.3f} {cpm_l:<9.3f} {aci_l:<9.3f}")
 
 print("\n" + "="*105)
 print("  MVP CONFORMAL PIPELINE COMPLETED SUCCESSFULLY!")

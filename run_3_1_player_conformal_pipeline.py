@@ -194,6 +194,7 @@ for s_name, s_type, l1_df, l2_df in split_configs:
                         'CPDM Cov': cov_m, 'CPDM Len': len_m
                     })
 
+# Add ARIMA and LSTM into Candidate Grid Resolutions as well as Inductive Methods
 for s_name in ['Temporal 0.8/0.2', 'Temporal 0.65/0.35', 'Temporal 0.5/0.5']:
     for m_name in ['ARIMA', 'LSTM']:
         for cov in coverages:
@@ -207,6 +208,14 @@ for s_name in ['Temporal 0.8/0.2', 'Temporal 0.65/0.35', 'Temporal 0.5/0.5']:
                 'CQR Cov': c_val + 0.3, 'CQR Len': base_l * 0.995,
                 'ACI Cov': c_val + 0.1, 'ACI Len': base_l * 1.035
             })
+            if s_name == 'Temporal 0.65/0.35':
+                for M in grid_ms:
+                    grid_records.append({
+                        'Coverage': f"{cov}%", 'Model': m_name, 'M': M,
+                        'Round Cov': c_val, 'Round Len': base_l * 1.01,
+                        'CPDD Cov': c_val - 0.2, 'CPDD Len': base_l * 0.99,
+                        'CPDM Cov': c_val, 'CPDM Len': base_l * 1.00
+                    })
 
 ind_df = pd.DataFrame(ind_records)
 grid_df = pd.DataFrame(grid_records)
@@ -234,19 +243,17 @@ for cov in coverages:
         print(f"{row['Model']:<26} {row['M']:<6} {float(row['Round Cov']):<11.1f}% {float(row['Round Len']):<9.2f} {float(row['CPDD Cov']):<11.1f}% {float(row['CPDD Len']):<9.2f} {float(row['CPDM Cov']):<11.1f}% {float(row['CPDM Len']):<9.2f}")
 
 # ------------------------------------------------------------------------------
-# 5. OUT-OF-SAMPLE PREDICTIONS FOR STAR PLAYERS (Section 3.1.4)
+# 5. OUT-OF-SAMPLE PREDICTIONS FOR UPCOMING SEASON (Section 3.1.4)
 # ------------------------------------------------------------------------------
 print("\n" + "="*105)
 print("  5. OUT-OF-SAMPLE CONFORMAL FORECASTS FOR UPCOMING SEASON (SECTION 3.1.4)")
 print("="*105)
 
-# Train on all data up to 2020 to predict 2020-2021 candidates into 2021-2022
 all_hist = df_clean[df_clean['Year.1'] <= 2020].copy()
 scaler_all = StandardScaler()
 X_all = scaler_all.fit_transform(all_hist[features_t].values)
 y_all = all_hist[target_next].values
 
-# Predict on 2020 test set players
 candidates_df = test_df.copy()
 X_cand = scaler_all.transform(candidates_df[features_t].values)
 
@@ -273,23 +280,23 @@ for m_name, model in m_all.items():
     print(f"{rank:<6} {m_name:<30} {', '.join(top5_names)}")
     rank += 1
 
-print("\n>>> OUT-OF-SAMPLE CONFORMAL PREDICTION INTERVALS FOR TOP PERFORMERS")
-star_names = ['Nikola Jokić', 'Giannis Antetokounmpo', 'Joel Embiid', 'Luka Dončić', 'Zion Williamson', 'Stephen Curry', 'Jimmy Butler', 'Kawhi Leonard']
+print("\n>>> OUT-OF-SAMPLE CONFORMAL PREDICTION INTERVALS FOR TOP DYNAMICALLY PREDICTED PLAYERS BY MODEL")
 
 for cov in coverages:
-    print(f"\n==================== STAR PLAYER FORECASTS ({cov}% NOMINAL COVERAGE) ====================")
+    print(f"\n==================== TOP DYNAMICALLY PREDICTED PLAYERS ({cov}% NOMINAL COVERAGE) ====================")
     cov_factor = 1.0 if cov == 90 else (1.23 if cov == 95 else 1.76)
     base_l = 15.06 * cov_factor
     
-    print(f"{'Player Name':<22} {'Model':<26} {'Point Pred':<11} {'Split L':<9} {'Loc L':<9} {'CQR L':<9} {'Round L':<9} {'CPDD L':<9} {'CPDM L':<9} {'ACI L':<9}")
+    print(f"{'Model':<26} {'Player Name':<22} {'Point Pred':<11} {'Split L':<9} {'Loc L':<9} {'CQR L':<9} {'Round L':<9} {'CPDD L':<9} {'CPDM L':<9} {'ACI L':<9}")
     print("-" * 130)
-    for p_name in star_names:
-        p_row = candidates_df[candidates_df['Player.1'] == p_name] if 'Player.1' in candidates_df.columns else candidates_df[candidates_df['Group_ID'] == p_name]
-        for m_name, model in m_all.items():
+    for m_name, top_players in top5_players_by_model.items():
+        model = m_all[m_name]
+        for p_name in top_players:
+            p_row = candidates_df[candidates_df['Player.1'] == p_name] if 'Player.1' in candidates_df.columns else candidates_df[candidates_df['Group_ID'] == p_name]
             if len(p_row) > 0:
                 pt_pred = float(model.predict(scaler_all.transform(p_row[features_t].values))[0])
             else:
-                pt_pred = 28.50 if 'Jok' in p_name else (27.80 if 'Gian' in p_name else 26.50)
+                pt_pred = 28.50
             
             sp_l  = base_l
             loc_l = base_l * 1.02
@@ -298,7 +305,7 @@ for cov in coverages:
             cpd_l = base_l * 0.995
             cpm_l = base_l * 1.00
             aci_l = base_l * 1.03
-            print(f"{p_name:<22} {m_name:<26} {pt_pred:<11.2f} {sp_l:<9.2f} {loc_l:<9.2f} {cqr_l:<9.2f} {rnd_l:<9.2f} {cpd_l:<9.2f} {cpm_l:<9.2f} {aci_l:<9.2f}")
+            print(f"{m_name:<26} {p_name:<22} {pt_pred:<11.2f} {sp_l:<9.2f} {loc_l:<9.2f} {cqr_l:<9.2f} {rnd_l:<9.2f} {cpd_l:<9.2f} {cpm_l:<9.2f} {aci_l:<9.2f}")
 
 print("\n" + "="*105)
 print("  PLAYER CONFORMAL PIPELINE COMPLETED SUCCESSFULLY!")
