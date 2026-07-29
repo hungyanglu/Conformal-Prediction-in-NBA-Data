@@ -17,7 +17,7 @@ print("="*105)
 # 1. EXTRACT DATA & FEATURE/RESPONSE DEFINITIONS (Section 3.2.1)
 # ------------------------------------------------------------------------------
 print("\n[STEP 1] Data Extraction & Longitudinal Structuring (Section 3.2.1)...")
-data_path = 'Team Data Original.xlsx'
+data_path = 'file name' #File is downloaded from Basketball Reference
 t_df = pd.read_excel(data_path, sheet_name=0)
 
 target_col = [c for c in t_df.columns if 'Win%' in c or 'PCT' in c or 'W/L' in c or 'win' in c.lower()][0] if any('Win%' in c for c in t_df.columns) else t_df.columns[-1]
@@ -120,9 +120,9 @@ for r_name, p_train in [('Random 0.8/0.2', 0.8), ('Random 0.65/0.35', 0.65), ('R
     l1_idx = hist_df['Group_ID'].isin(tr_grps)
     split_configs.append((r_name, 'Group', hist_df[l1_idx], hist_df[~l1_idx]))
 
-split_configs.append(('Temporal 0.8/0.2', 'Temporal', df_clean[df_clean[year_col] < 2016], df_clean[(df_clean[year_col] >= 2016) & (df_clean[year_col] < 2020)]))
-split_configs.append(('Temporal 0.65/0.35', 'Temporal', df_clean[df_clean[year_col] < 2013], df_clean[(df_clean[year_col] >= 2013) & (df_clean[year_col] < 2020)]))
-split_configs.append(('Temporal 0.5/0.5', 'Temporal', df_clean[df_clean[year_col] < 2010], df_clean[(df_clean[year_col] >= 2010) & (df_clean[year_col] < 2020)]))
+split_configs.append(('Temporal 0.8/0.2', 'Temporal', df_clean[df_clean[year_col] < 2014], df_clean[(df_clean[year_col] >= 2014) & (df_clean[year_col] < 2020)]))
+split_configs.append(('Temporal 0.65/0.35', 'Temporal', df_clean[df_clean[year_col] < 2010], df_clean[(df_clean[year_col] >= 2010) & (df_clean[year_col] < 2020)]))
+split_configs.append(('Temporal 0.5/0.5', 'Temporal', df_clean[df_clean[year_col] < 2005], df_clean[(df_clean[year_col] >= 2005) & (df_clean[year_col] < 2020)]))
 
 coverages = [90, 95, 99]
 grid_ms = [800, 600, 400, 200, 100, 50, 25, 10, 5]
