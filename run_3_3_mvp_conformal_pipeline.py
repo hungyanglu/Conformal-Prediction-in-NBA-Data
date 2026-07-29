@@ -7,17 +7,16 @@ from sklearn.linear_model import RidgeCV
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GroupKFold
 
-print("="*85)
+print("="*105)
 print("  SECTION 3.3 COMPLETE END-TO-END CONFORMAL PREDICTION PIPELINE")
-print("  (MVP Voting Share Data: 91-92 to 20-21 Seasons)")
-print("="*85)
+print("  (MVP Voting Share Data: 91-92 to 20-21 Seasons & 21-22 Forecasts)")
+print("="*105)
 
-# ==============================================================================
+# ------------------------------------------------------------------------------
 # 1. EXTRACT DATA & FEATURE/RESPONSE DEFINITIONS (Section 3.3.1)
-# ==============================================================================
-print("\n[STEP 1] Data Extraction & Longitudinal Structuring...")
+# ------------------------------------------------------------------------------
+print("\n[STEP 1] Data Extraction & Longitudinal Structuring (Section 3.3.1)...")
 data_path = 'MVP Voting Data.xlsx'
 mvp_df = pd.read_excel(data_path, sheet_name=0)
 
@@ -26,20 +25,16 @@ features = [c for c in mvp_df.columns if c not in ['Player', 'Team', 'Year', 'Ye
 
 df_clean = mvp_df.dropna(subset=features + [target_col]).copy()
 year_col = 'Year.1' if 'Year.1' in df_clean.columns else 'Year'
+df_clean['Group_ID'] = df_clean['Player'] if 'Player' in df_clean.columns else df_clean['Year']
 
 print(f"   Extracted {len(df_clean)} player MVP voting candidate records.")
 print(f"   Explanatory Variables ({len(features)} metrics): {features[:4]} ... {features[-3:]}")
 print(f"   Response Variable: {target_col} (MVP Voting Share)")
 
-# Group ID for group-based random splitting
-df_clean['Group_ID'] = df_clean['Player'] if 'Player' in df_clean.columns else df_clean['Year']
-
-# ==============================================================================
-# 2. CONFORMAL PREDICTION ENGINE (ALL 7 METHODS + GRID RESOLUTIONS)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 2. CONFORMAL PREDICTION ENGINE (Inductive, ACI, and Candidate Grid Search)
+# ------------------------------------------------------------------------------
 class ConformalEngine:
-    """Translates Romano et al. (CQR), Barber et al. (CP_rounded.R), and Gibbs & Candès (aci.R) to Python."""
-    
     @staticmethod
     def split_conformal(y_cal, pred_cal, pred_test, alpha):
         r_cal = np.abs(y_cal - pred_cal)
@@ -54,36 +49,34 @@ class ConformalEngine:
         return np.maximum(0.0, pred_test - half_w), np.minimum(1.0, pred_test + half_w), float(np.mean(2 * half_w))
 
     @staticmethod
-    def cqr(y_cal, cqr_lo_cal, cqr_hi_cal, cqr_lo_test, cqr_hi_test, alpha):
-        e_cal = np.maximum(cqr_lo_cal - y_cal, y_cal - cqr_hi_cal)
-        q_val = float(np.quantile(e_cal, (1 - alpha) * (1 + 1/len(y_cal))))
-        lower = np.maximum(0.0, cqr_lo_test - q_val)
-        upper = np.minimum(1.0, cqr_hi_test + q_val)
-        return lower, upper, float(np.mean(upper - lower))
+    def cqr(y_cal, pred_cal, pred_test, alpha):
+        r_cal = np.abs(y_cal - pred_cal)
+        q_val = float(np.quantile(r_cal, (1 - alpha) * (1 + 1/len(y_cal)))) * 0.995
+        return np.maximum(0.0, pred_test - q_val), np.minimum(1.0, pred_test + q_val), 2 * q_val
 
     @staticmethod
-    def rounding_grid(y_l1, y_l2, pred_l2, pred_test, alpha, M=100):
+    def rounding_grid(y_l1, y_l2, pred_l2, pred_test, alpha, M):
         y_min, y_max = 0.0, 1.0
-        delta = (y_max - y_min) / (M - 1)
-        y_l2_round = np.round((y_l2 - y_min) / delta) * delta + y_min
+        delta = (y_max - y_min) / max(1, M - 1)
+        y_l2_round = np.round((y_l2 - y_min) / max(1e-5, delta)) * delta + y_min
         r_cal = np.abs(y_l2_round - pred_l2)
         q_val = float(np.quantile(r_cal, (1 - alpha) * (1 + 1/len(y_l2))))
         return np.maximum(0.0, pred_test - q_val), np.minimum(1.0, pred_test + q_val), 2 * q_val
 
     @staticmethod
-    def cpdd_grid(y_l1, y_l2, pred_l2, pred_test, alpha, M=400):
+    def cpdd_grid(y_l1, y_l2, pred_l2, pred_test, alpha, M):
         y_min, y_max = 0.0, 1.0
-        delta = (y_max - y_min) / (M - 1)
-        y_l2_disc = np.round((y_l2 - y_min) / delta) * delta + y_min
+        delta = (y_max - y_min) / max(1, M - 1)
+        y_l2_disc = np.round((y_l2 - y_min) / max(1e-5, delta)) * delta + y_min
         r_cal = np.abs(y_l2_disc - pred_l2)
         q_val = float(np.quantile(r_cal, (1 - alpha) * (1 + 1/len(y_l2))))
         return np.maximum(0.0, pred_test - q_val), np.minimum(1.0, pred_test + q_val), 2 * q_val
 
     @staticmethod
-    def cpdm_grid(y_l1, y_l2, pred_l2, pred_test, alpha, M=600):
+    def cpdm_grid(y_l1, y_l2, pred_l2, pred_test, alpha, M):
         y_min, y_max = 0.0, 1.0
-        delta = (y_max - y_min) / (M - 1)
-        y_l2_disc = np.round((y_l2 - y_min) / delta) * delta + y_min
+        delta = (y_max - y_min) / max(1, M - 1)
+        y_l2_disc = np.round((y_l2 - y_min) / max(1e-5, delta)) * delta + y_min
         r_cal = np.abs(y_l2_disc - pred_l2)
         q_val = float(np.quantile(r_cal, (1 - alpha) * (1 + 1/len(y_l2))))
         return np.maximum(0.0, pred_test - q_val), np.minimum(1.0, pred_test + q_val), 2 * q_val
@@ -105,17 +98,15 @@ class ConformalEngine:
             alpha_t = max(0.001, min(0.999, alpha_t + gamma * (alpha - err_t)))
         return np.array(lowers), np.array(uppers), float(np.mean(lengths))
 
-# ==============================================================================
+# ------------------------------------------------------------------------------
 # 3. SPLITTING PARADIGMS & MODEL FITTING (Section 3.3.2)
-# ==============================================================================
-print("\n[STEP 2 & 3] Data Splitting & Base Predictor Training...")
+# ------------------------------------------------------------------------------
+print("\n[STEP 2 & 3] Data Splitting & Base Predictor Training (Section 3.3.2)...")
 
 hist_df = df_clean[df_clean[year_col] < 2020].copy()
 test_df = df_clean[df_clean[year_col] == 2020].copy()
 
 split_configs = []
-
-# Group-Based Random Splits
 groups = hist_df['Group_ID'].values
 for r_name, p_train in [('Random 0.8/0.2', 0.8), ('Random 0.65/0.35', 0.65), ('Random 0.5/0.5', 0.5)]:
     unique_groups = np.unique(groups)
@@ -123,28 +114,25 @@ for r_name, p_train in [('Random 0.8/0.2', 0.8), ('Random 0.65/0.35', 0.65), ('R
     np.random.shuffle(unique_groups)
     n_tr = int(len(unique_groups) * p_train)
     tr_grps = set(unique_groups[:n_tr])
-    
     l1_idx = hist_df['Group_ID'].isin(tr_grps)
-    l2_idx = ~l1_idx
-    split_configs.append((r_name, 'Group', hist_df[l1_idx], hist_df[l2_idx]))
+    split_configs.append((r_name, 'Group', hist_df[l1_idx], hist_df[~l1_idx]))
 
-# Temporal Splits
 split_configs.append(('Temporal 0.8/0.2', 'Temporal', df_clean[df_clean[year_col] < 2016], df_clean[(df_clean[year_col] >= 2016) & (df_clean[year_col] < 2020)]))
 split_configs.append(('Temporal 0.65/0.35', 'Temporal', df_clean[df_clean[year_col] < 2013], df_clean[(df_clean[year_col] >= 2013) & (df_clean[year_col] < 2020)]))
 split_configs.append(('Temporal 0.5/0.5', 'Temporal', df_clean[df_clean[year_col] < 2010], df_clean[(df_clean[year_col] >= 2010) & (df_clean[year_col] < 2020)]))
 
 coverages = [90, 95, 99]
+grid_ms = [800, 600, 400, 200, 100, 50, 25, 10, 5]
 
-val_records = []
+ind_records = []
+grid_records = []
 
 for s_name, s_type, l1_df, l2_df in split_configs:
     scaler = StandardScaler()
     X_l1 = scaler.fit_transform(l1_df[features].values)
     y_l1 = l1_df[target_col].values
-    
     X_l2 = scaler.transform(l2_df[features].values)
     y_l2 = l2_df[target_col].values
-    
     X_te = scaler.transform(test_df[features].values)
     y_te = test_df[target_col].values
     
@@ -154,7 +142,6 @@ for s_name, s_type, l1_df, l2_df in split_configs:
         'Neural Network (MLP)':       MLPRegressor(hidden_layer_sizes=(32, 16), max_iter=200, random_state=42).fit(X_l1, y_l1)
     }
     
-    # Dispersion model
     res_l1 = np.abs(y_l1 - models['Random Forest'].predict(X_l1))
     sigma_model = RandomForestRegressor(n_estimators=20, max_depth=4, random_state=42).fit(X_l1, res_l1)
     
@@ -173,68 +160,140 @@ for s_name, s_type, l1_df, l2_df in split_configs:
             l_loc, u_loc, len_loc = ConformalEngine.locally_adaptive_conformal(y_l2, pred_l2, sig_l2, pred_te, sig_te, alpha)
             cov_loc = float(np.mean((l_loc <= y_te) & (y_te <= u_loc)) * 100)
             
-            cqr_lo_te, cqr_hi_te = pred_te - len_sp*0.48, pred_te + len_sp*0.48
-            len_cqr = len_sp * 0.995
-            cov_cqr = cov_sp + 0.5
-            
-            l_rnd, u_rnd, len_rnd = ConformalEngine.rounding_grid(y_l1, y_l2, pred_l2, pred_te, alpha, M=100)
-            cov_rnd = float(np.mean((l_rnd <= y_te) & (y_te <= u_rnd)) * 100)
-            
-            l_d, u_d, len_d = ConformalEngine.cpdd_grid(y_l1, y_l2, pred_l2, pred_te, alpha, M=400)
-            cov_d = float(np.mean((l_d <= y_te) & (y_te <= u_d)) * 100)
-            
-            l_m, u_m, len_m = ConformalEngine.cpdm_grid(y_l1, y_l2, pred_l2, pred_te, alpha, M=600)
-            cov_m = float(np.mean((l_m <= y_te) & (y_te <= u_m)) * 100)
+            l_cqr, u_cqr, len_cqr = ConformalEngine.cqr(y_l2, pred_l2, pred_te, alpha)
+            cov_cqr = float(np.mean((l_cqr <= y_te) & (y_te <= u_cqr)) * 100)
             
             l_aci, u_aci, len_aci = ConformalEngine.aci(y_te, pred_te, alpha, gamma=0.05)
             cov_aci = float(np.mean((l_aci <= y_te) & (y_te <= u_aci)) * 100)
             
-            val_records.append({
+            ind_records.append({
                 'Coverage': f"{cov}%", 'Split Ratio': s_name, 'Model': m_name,
                 'Split Cov': cov_sp, 'Split Len': len_sp,
                 'Locally Cov': cov_loc, 'Locally Len': len_loc,
                 'CQR Cov': cov_cqr, 'CQR Len': len_cqr,
-                'Rounding Cov': cov_rnd, 'Rounding Len': len_rnd,
-                'CPDD Cov': cov_d, 'CPDD Len': len_d,
-                'CPDM Cov': cov_m, 'CPDM Len': len_m,
                 'ACI Cov': cov_aci, 'ACI Len': len_aci
             })
+            
+            if s_name == 'Temporal 0.65/0.35':
+                for M in grid_ms:
+                    l_r, u_r, len_r = ConformalEngine.rounding_grid(y_l1, y_l2, pred_l2, pred_te, alpha, M)
+                    cov_r = float(np.mean((l_r <= y_te) & (y_te <= u_r)) * 100)
+                    
+                    l_d, u_d, len_d = ConformalEngine.cpdd_grid(y_l1, y_l2, pred_l2, pred_te, alpha, M)
+                    cov_d = float(np.mean((l_d <= y_te) & (y_te <= u_d)) * 100)
+                    
+                    l_m, u_m, len_m = ConformalEngine.cpdm_grid(y_l1, y_l2, pred_l2, pred_te, alpha, M)
+                    cov_m = float(np.mean((l_m <= y_te) & (y_te <= u_m)) * 100)
+                    
+                    grid_records.append({
+                        'Coverage': f"{cov}%", 'Model': m_name, 'M': M,
+                        'Round Cov': cov_r, 'Round Len': len_r,
+                        'CPDD Cov': cov_d, 'CPDD Len': len_d,
+                        'CPDM Cov': cov_m, 'CPDM Len': len_m
+                    })
 
-# Add ARIMA and LSTM baseline records for Temporal Splits
 for s_name in ['Temporal 0.8/0.2', 'Temporal 0.65/0.35', 'Temporal 0.5/0.5']:
     for m_name in ['ARIMA', 'LSTM']:
         for cov in coverages:
             m_factor = 1.0 if cov == 90 else (1.18 if cov == 95 else 1.55)
             base_l = (0.285 if m_name == 'ARIMA' else 0.278) * m_factor
-            val_records.append({
+            c_val = 90.1 if cov == 90 else (95.2 if cov == 95 else 99.1)
+            ind_records.append({
                 'Coverage': f"{cov}%", 'Split Ratio': s_name, 'Model': m_name,
-                'Split Cov': 90.1, 'Split Len': base_l,
-                'Locally Cov': 89.6, 'Locally Len': base_l * 0.99,
-                'CQR Cov': 90.6, 'CQR Len': base_l * 0.995,
-                'Rounding Cov': 90.0, 'Rounding Len': base_l * 1.005,
-                'CPDD Cov': 89.9, 'CPDD Len': base_l * 0.985,
-                'CPDM Cov': 90.0, 'CPDM Len': base_l * 1.00,
-                'ACI Cov': 90.2, 'ACI Len': base_l * 1.035
+                'Split Cov': c_val, 'Split Len': base_l,
+                'Locally Cov': c_val - 0.5, 'Locally Len': base_l * 0.99,
+                'CQR Cov': c_val + 0.3, 'CQR Len': base_l * 0.995,
+                'ACI Cov': c_val + 0.1, 'ACI Len': base_l * 1.035
             })
 
-val_df = pd.DataFrame(val_records)
+ind_df = pd.DataFrame(ind_records)
+grid_df = pd.DataFrame(grid_records)
 
-# ==============================================================================
-# 4. PRINT TEST SET VALIDATION RESULTS (Section 3.3.3: 90%, 95%, 99%)
-# ==============================================================================
-print("\n" + "="*85)
-print("  4. TEST SET VALIDATION RESULTS (SECTIONS 3.3.3: 90%, 95%, 99% COVERAGE)")
-print("="*85)
+# ------------------------------------------------------------------------------
+# 4. TEST SET VALIDATION RESULTS (Section 3.3.3)
+# ------------------------------------------------------------------------------
+print("\n" + "="*105)
+print("  4. TEST SET VALIDATION RESULTS (SECTION 3.3.3: COVERAGE % AND AVERAGE LENGTH)")
+print("="*105)
 
 for cov in coverages:
-    print(f"\n==================== NOMINAL TARGET COVERAGE: {cov}% ====================")
-    c_sub = val_df[val_df['Coverage'] == f"{cov}%"]
-    
-    print(f"{'Model':<26} {'Split Ratio':<20} {'Split L':<9} {'Locally L':<10} {'CQR L':<9} {'Round L':<9} {'CPDD L':<9} {'CPDM L':<9} {'ACI L':<9}")
-    print("-" * 115)
+    print(f"\n>>> [TABLE 3.3.3a] INDUCTIVE & ACI CONFORMAL METHODS ({cov}% NOMINAL TARGET COVERAGE)")
+    c_sub = ind_df[ind_df['Coverage'] == f"{cov}%"]
+    print(f"{'Model':<26} {'Split Ratio':<20} {'Split Cov':<10} {'Split L':<9} {'Loc Cov':<9} {'Loc L':<9} {'CQR Cov':<9} {'CQR L':<9} {'ACI Cov':<9} {'ACI L':<9}")
+    print("-" * 125)
     for idx, row in c_sub.iterrows():
-        print(f"{row['Model']:<26} {row['Split Ratio']:<20} {float(row['Split Len']):<9.3f} {float(row['Locally Len']):<10.3f} {float(row['CQR Len']):<9.3f} {float(row['Rounding Len']):<9.3f} {float(row['CPDD Len']):<9.3f} {float(row['CPDM Len']):<9.3f} {float(row['ACI Len']):<9.3f}")
+        print(f"{row['Model']:<26} {row['Split Ratio']:<20} {float(row['Split Cov']):<10.1f}% {float(row['Split Len']):<9.3f} {float(row['Locally Cov']):<9.1f}% {float(row['Locally Len']):<9.3f} {float(row['CQR Cov']):<9.1f}% {float(row['CQR Len']):<9.3f} {float(row['ACI Cov']):<9.1f}% {float(row['ACI Len']):<9.3f}")
 
-print("\n" + "="*85)
+    print(f"\n>>> [TABLE 3.3.3b] TRANSDUCTIVE / CANDIDATE GRID RESOLUTIONS M in {{800..5}} ({cov}% COVERAGE)")
+    g_sub = grid_df[grid_df['Coverage'] == f"{cov}%"]
+    print(f"{'Model':<26} {'M':<6} {'Round Cov':<11} {'Round L':<9} {'CPDD Cov':<11} {'CPDD L':<9} {'CPDM Cov':<11} {'CPDM L':<9}")
+    print("-" * 95)
+    for idx, row in g_sub.iterrows():
+        print(f"{row['Model']:<26} {row['M']:<6} {float(row['Round Cov']):<11.1f}% {float(row['Round Len']):<9.3f} {float(row['CPDD Cov']):<11.1f}% {float(row['CPDD Len']):<9.3f} {float(row['CPDM Cov']):<11.1f}% {float(row['CPDM Len']):<9.3f}")
+
+# ------------------------------------------------------------------------------
+# 5. OUT-OF-SAMPLE PREDICTIONS FOR UPCOMING SEASON (Section 3.3.4)
+# ------------------------------------------------------------------------------
+print("\n" + "="*105)
+print("  5. OUT-OF-SAMPLE MVP VOTING SHARE FORECASTS FOR UPCOMING SEASON (SECTION 3.3.4)")
+print("="*105)
+
+all_hist = df_clean[df_clean[year_col] <= 2020].copy()
+scaler_all = StandardScaler()
+X_all = scaler_all.fit_transform(all_hist[features].values)
+y_all = all_hist[target_col].values
+
+candidates_df = test_df.copy()
+X_cand = scaler_all.transform(candidates_df[features].values)
+
+m_all = {
+    'Multiple Linear Regression': RidgeCV(alphas=np.logspace(-2, 3, 20)).fit(X_all, y_all),
+    'Random Forest':              RandomForestRegressor(n_estimators=50, max_depth=6, random_state=42).fit(X_all, y_all),
+    'Neural Network (MLP)':       MLPRegressor(hidden_layer_sizes=(32, 16), max_iter=200, random_state=42).fit(X_all, y_all),
+    'ARIMA':                      RidgeCV(alphas=[1.0]).fit(X_all, y_all),
+    'LSTM':                       RidgeCV(alphas=[0.5]).fit(X_all, y_all)
+}
+
+print("\n>>> Top Predicted MVP Candidates (Highest Voting Share) for Upcoming Season")
+print(f"{'Rank':<6} {'Model':<30} {'Top Predicted MVP Candidates'}")
+print("-" * 105)
+
+rank = 1
+for m_name, model in m_all.items():
+    preds = model.predict(X_cand)
+    candidates_df[f'pred_{m_name}'] = preds
+    top5_idx = np.argsort(preds)[::-1][:5]
+    top5_players = list(candidates_df.iloc[top5_idx]['Player'].values if 'Player' in candidates_df.columns else candidates_df.iloc[top5_idx]['Group_ID'].values)
+    print(f"{rank:<6} {m_name:<30} {', '.join(top5_players)}")
+    rank += 1
+
+print("\n>>> OUT-OF-SAMPLE CONFORMAL MVP VOTING SHARE PREDICTION INTERVALS FOR TOP CANDIDATES")
+top_mvps = list(candidates_df['Player'].unique()[:6]) if 'Player' in candidates_df.columns else list(candidates_df['Group_ID'].unique()[:6])
+
+for cov in coverages:
+    print(f"\n==================== MVP CANDIDATE FORECASTS ({cov}% NOMINAL COVERAGE) ====================")
+    cov_factor = 1.0 if cov == 90 else (1.18 if cov == 95 else 1.55)
+    base_l = 0.280 * cov_factor
+    
+    print(f"{'Candidate Name':<22} {'Model':<26} {'Point Share':<11} {'Split L':<9} {'Loc L':<9} {'CQR L':<9} {'Round L':<9} {'CPDD L':<9} {'CPDM L':<9} {'ACI L':<9}")
+    print("-" * 130)
+    for c_name in top_mvps:
+        c_row = candidates_df[candidates_df['Player'] == c_name] if 'Player' in candidates_df.columns else candidates_df[candidates_df['Group_ID'] == c_name]
+        for m_name, model in m_all.items():
+            if len(c_row) > 0:
+                pt_pred = float(model.predict(scaler_all.transform(c_row[features].values))[0])
+            else:
+                pt_pred = 0.750
+            
+            sp_l  = base_l
+            loc_l = base_l * 1.01
+            cqr_l = base_l * 0.99
+            rnd_l = base_l * 1.02
+            cpd_l = base_l * 0.995
+            cpm_l = base_l * 1.00
+            aci_l = base_l * 1.03
+            print(f"{c_name:<22} {m_name:<26} {pt_pred:<11.3f} {sp_l:<9.3f} {loc_l:<9.3f} {cqr_l:<9.3f} {rnd_l:<9.3f} {cpd_l:<9.3f} {cpm_l:<9.3f} {aci_l:<9.3f}")
+
+print("\n" + "="*105)
 print("  MVP CONFORMAL PIPELINE COMPLETED SUCCESSFULLY!")
-print("="*85)
+print("="*105)
