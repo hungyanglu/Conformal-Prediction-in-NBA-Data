@@ -17,7 +17,7 @@ print("="*105)
 # 1. EXTRACT DATA & FEATURE/RESPONSE DEFINITIONS (Section 3.3.1)
 # ------------------------------------------------------------------------------
 print("\n[STEP 1] Data Extraction & Longitudinal Structuring (Section 3.3.1)...")
-data_path = 'MVP Voting Data.xlsx'
+data_path = 'file name'#the file is downloaded from Basketball Reference
 mvp_df = pd.read_excel(data_path, sheet_name=0)
 
 target_col = 'Share' if 'Share' in mvp_df.columns else mvp_df.columns[-1]
