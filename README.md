@@ -5,6 +5,8 @@ This project implements distribution-free **Conformal Prediction (CP)** in regre
 
 By pairing modern machine learning algorithms with 7 rigorous conformal frameworks, we quantify predictive uncertainty without making parametric distributional assumptions about the underlying data.
 
+This project was done in December 2021.
+
 ---
 
 ## Research Questions
